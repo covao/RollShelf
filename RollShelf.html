@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RollShelf</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@800&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0f141a;
@@ -23,8 +29,8 @@
       --tile-height: calc(var(--tile-width) * 1.5);
       --content-media-width: 78px;
       --content-media-height: calc(var(--content-media-width) * 1.5);
-      --overlay-height: 30px;
-      --tile-font-size: 5px;
+      --overlay-height: 38px;
+      --tile-font-size: 7px;
       --grid-gap: calc(var(--tile-width) * 0.18);
       --transition: 180ms ease;
       --shadow: 0 16px 34px rgba(0, 0, 0, 0.26);
@@ -91,37 +97,99 @@
     .topbar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 8px 12px;
-      flex-wrap: wrap;
+      gap: 0;
+      padding: 0 8px 0 10px;
+      flex-wrap: nowrap;
+      height: 48px;
+      min-height: 48px;
+      flex-shrink: 0;
+      overflow: hidden;
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      flex: 0 0 auto;
       min-width: 0;
-      flex: 0 1 auto;
+      padding-right: 4px;
     }
 
-    .brand-title {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: .15px;
-      white-space: nowrap;
+    .toolbar-wrap {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
     }
+
+    .toolbar-wrap::before,
+    .toolbar-wrap::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 18px;
+      z-index: 2;
+      pointer-events: none;
+      transition: opacity 160ms ease;
+    }
+
+    .toolbar-wrap::before {
+      left: 0;
+      background: linear-gradient(to right, var(--panel-solid), transparent);
+    }
+
+    .toolbar-wrap::after {
+      right: 0;
+      background: linear-gradient(to left, var(--panel-solid), transparent);
+    }
+
+    .toolbar-wrap.at-start::before { opacity: 0; }
+    .toolbar-wrap.at-end::after   { opacity: 0; }
 
     .toolbar {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
-      flex: 1 1 620px;
-      min-width: 0;
-      flex-wrap: wrap;
+      gap: 4px;
+      height: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-wrap: nowrap;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      padding: 0 6px;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x;
+      cursor: grab;
     }
 
+    .toolbar.dragging {
+      cursor: grabbing;
+    }
+
+    .toolbar.dragging > * {
+      pointer-events: none;
+    }
+
+    .toolbar::-webkit-scrollbar { display: none; }
+    .toolbar > * { flex-shrink: 0; }
+
+    .search-wrap-outer { display: none; }
+
+    .toolbar-search {
+      flex: 0 0 auto;
+      width: clamp(120px, 22vw, 220px);
+      position: relative;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: .04em;
+      white-space: nowrap;
+      font-family: 'Exo 2', 'Rajdhani', 'Bebas Neue', system-ui, sans-serif;
+    }
 
     .topbar, .topbar input, .topbar button {
       font-size: 12px;
@@ -129,9 +197,7 @@
 
     .search-wrap {
       position: relative;
-      flex: 1 1 260px;
-      max-width: 380px;
-      min-width: 180px;
+      width: 100%;
     }
 
     .search-input,
@@ -581,6 +647,18 @@
     }
 
     /* RollShelf brand color */
+    .brand-link {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      cursor: pointer;
+      border-radius: 8px;
+      padding: 2px 4px;
+      transition: opacity 160ms ease;
+    }
+    .brand-link:hover { opacity: 0.75; }
+
     .brand-icon {
       font-size: 16px;
       color: #4BAAE5;
@@ -632,6 +710,18 @@
       cursor: default;
       pointer-events: none;
     }
+
+    /* Zoom percentage label */
+    .zoom-label {
+      font-size: 11px;
+      font-family: 'DM Mono', 'Courier New', monospace;
+      color: var(--muted);
+      white-space: nowrap;
+      min-width: 36px;
+      text-align: center;
+      flex-shrink: 0;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -662,73 +752,79 @@
               <path d="M4 17h16"></path>
             </svg>
           </button>
-          <span class="brand-icon">📚</span>
-          <div class="brand-title">RollShelf</div>
+          <a href="https://github.com/covao/RollShelf" target="_blank" rel="noopener" class="brand-link" title="RollShelf on GitHub">
+            <span class="brand-icon">📚</span>
+            <div class="brand-title">RollShelf</div>
+          </a>
           <div id="brandCount" class="brand-count"></div>
           <div id="sourceBadge" class="source-badge hidden"></div>
         </div>
 
-        <div class="toolbar">
-          <button id="goUpButton" class="icon-button" type="button" title="Go up one level" aria-label="Go up one level" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 19V5"></path>
-              <path d="m5 12 7-7 7 7"></path>
-            </svg>
-          </button>
+        <div class="toolbar-wrap at-start" id="toolbarWrap">
+          <div class="toolbar" id="toolbar">
+            <button id="goUpButton" class="icon-button" type="button" title="Go up one level" aria-label="Go up one level" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19V5"></path>
+                <path d="m5 12 7-7 7 7"></path>
+              </svg>
+            </button>
 
-          <div class="search-wrap">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="7"></circle>
-              <path d="m20 20-3.5-3.5"></path>
-            </svg>
-            <input id="searchInput" class="search-input" type="text" placeholder="Filter by file name" spellcheck="false" />
+            <button id="zoomOutButton" class="icon-button" type="button" title="Smaller grid" aria-label="Smaller grid">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M5 12h14"></path>
+              </svg>
+            </button>
+
+            <span id="zoomLabel" class="zoom-label">50%</span>
+
+            <button id="zoomInButton" class="icon-button" type="button" title="Larger grid" aria-label="Larger grid">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+            </button>
+
+            <button id="sortButton" class="icon-button" type="button" title="Sort: Name A→Z — click for Date" aria-label="Toggle sort order">
+              <svg id="sortIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"></path>
+                <path d="M7 12h10"></path>
+                <path d="M10 18h4"></path>
+              </svg>
+            </button>
+
+            <button id="scrollModeButton" class="icon-button" type="button" title="Toggle scroll mode" aria-label="Toggle scroll mode">
+              <svg id="scrollModeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12h16"></path>
+                <path d="m14 6 6 6-6 6"></path>
+                <path d="m10 6-6 6 6 6"></path>
+              </svg>
+            </button>
+
+            <button id="fullscreenButton" class="icon-button" type="button" title="Toggle full screen" aria-label="Toggle full screen">
+              <svg id="fullscreenIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+                <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
+                <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+              </svg>
+            </button>
+
+            <button id="configButton" class="icon-button" type="button" title="Configuration" aria-label="Configuration">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.01A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+
+            <div class="toolbar-search">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="m20 20-3.5-3.5"></path>
+              </svg>
+              <input id="searchInput" class="search-input" type="text" placeholder="Filter…" spellcheck="false" />
+            </div>
+
           </div>
-
-          <button id="zoomOutButton" class="icon-button" type="button" title="Smaller grid" aria-label="Smaller grid">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M5 12h14"></path>
-            </svg>
-          </button>
-
-          <button id="zoomInButton" class="icon-button" type="button" title="Larger grid" aria-label="Larger grid">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M12 5v14"></path>
-              <path d="M5 12h14"></path>
-            </svg>
-          </button>
-
-          <button id="sortButton" class="icon-button" type="button" title="Sort by name" aria-label="Toggle sort order">
-            <svg id="sortIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"></path>
-              <path d="M7 12h10"></path>
-              <path d="M10 18h4"></path>
-            </svg>
-          </button>
-
-          <button id="scrollModeButton" class="icon-button" type="button" title="Toggle scroll mode" aria-label="Toggle scroll mode">
-            <svg id="scrollModeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 12h16"></path>
-              <path d="m14 6 6 6-6 6"></path>
-              <path d="m10 6-6 6 6 6"></path>
-            </svg>
-          </button>
-
-          <button id="fullscreenButton" class="icon-button" type="button" title="Toggle full screen" aria-label="Toggle full screen">
-            <svg id="fullscreenIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
-              <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
-              <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
-              <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
-            </svg>
-          </button>
-
-          <button id="configButton" class="icon-button" type="button" title="Configuration" aria-label="Configuration">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.01A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-          </button>
-
         </div>
       </div>
 
@@ -764,12 +860,6 @@
           <label class="config-label" for="viewerUrlInput">User Viewer HTML URL</label>
           <input id="viewerUrlInput" class="config-input" type="text" spellcheck="false" />
           <div class="config-help">Use <code>{url}</code> to insert the selected file URL. When omitted, <code>?url=...</code> is appended automatically.</div>
-        </div>
-
-        <div class="config-group">
-          <label class="config-label" for="githubTokenInput">GitHub Personal Access Token (optional)</label>
-          <input id="githubTokenInput" class="config-input" type="password" spellcheck="false" placeholder="ghp_..." autocomplete="off" />
-          <div class="config-help">Increases API rate limit from 60 to 5,000 requests/hour for public repos. Required for private repos. Token is stored locally in your browser.</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -838,8 +928,11 @@
     const searchInputEl = document.getElementById('searchInput');
     const zoomOutButton = document.getElementById('zoomOutButton');
     const zoomInButton = document.getElementById('zoomInButton');
+    const zoomLabel = document.getElementById('zoomLabel');
     const sortButton = document.getElementById('sortButton');
     const sortIcon = document.getElementById('sortIcon');
+    const toolbarWrapEl = document.getElementById('toolbarWrap');
+    const toolbarEl = document.getElementById('toolbar');
     const scrollModeButton = document.getElementById('scrollModeButton');
     const scrollModeIcon = document.getElementById('scrollModeIcon');
     const fullscreenButton = document.getElementById('fullscreenButton');
@@ -853,7 +946,6 @@
     const viewerUrlInput = document.getElementById('viewerUrlInput');
     const folderFallbackTemplate = document.getElementById('folderFallbackTemplate');
     const fileFallbackTemplate = document.getElementById('fileFallbackTemplate');
-    const githubTokenInput = document.getElementById('githubTokenInput');
     const sourceBadgeEl = document.getElementById('sourceBadge');
 
     const state = {
@@ -908,12 +1000,11 @@
         return {
           viewerMode: parsed.viewerMode === 'user' ? 'user' : 'default',
           viewerUrl: typeof parsed.viewerUrl === 'string' && parsed.viewerUrl.trim() ? parsed.viewerUrl : DEFAULT_VIEWER_URL,
-          githubToken: typeof parsed.githubToken === 'string' ? parsed.githubToken : '',
           tileWidth,
           settingsVersion: SETTINGS_VERSION,
         };
       } catch {
-        return { viewerMode: 'default', viewerUrl: DEFAULT_VIEWER_URL, githubToken: '', tileWidth: DEFAULT_TILE_WIDTH, settingsVersion: SETTINGS_VERSION };
+        return { viewerMode: 'default', viewerUrl: DEFAULT_VIEWER_URL, tileWidth: DEFAULT_TILE_WIDTH, settingsVersion: SETTINGS_VERSION };
       }
     }
 
@@ -931,9 +1022,20 @@
       if (statusTextEl) statusTextEl.textContent = text;
     }
 
+    function updateToolbarFade() {
+      if (!toolbarEl || !toolbarWrapEl) return;
+      const { scrollLeft, scrollWidth, clientWidth } = toolbarEl;
+      toolbarWrapEl.classList.toggle('at-start', scrollLeft <= 2);
+      toolbarWrapEl.classList.toggle('at-end', scrollLeft + clientWidth >= scrollWidth - 2);
+    }
+
     function applyTileWidth() {
       const width = state.settings.tileWidth;
       document.documentElement.style.setProperty('--tile-width', `${width}px`);
+      if (zoomLabel) {
+      const pct = Math.round((width / DEFAULT_TILE_WIDTH) * 50);
+        zoomLabel.textContent = `${pct}%`;
+      }
       updateScrollOverlay();
     }
 
@@ -1599,8 +1701,6 @@
       const ref = gh.branch ? `?ref=${encodeURIComponent(gh.branch)}` : '';
       const apiUrl = `${GITHUB_API}/repos/${gh.owner}/${gh.repo}/contents${pathPart}${ref}`;
       const headers = { 'Accept': 'application/vnd.github+json' };
-      const token = state.settings.githubToken;
-      if (token) headers['Authorization'] = `Bearer ${token}`;
       const response = await fetch(apiUrl, { headers });
       if (!response.ok) {
         const msg = response.status === 403 ? 'GitHub API rate limit exceeded. Add a token in Configuration.' :
@@ -1881,7 +1981,6 @@
       viewerUrlInput.value = state.settings.viewerUrl || DEFAULT_VIEWER_URL;
       viewerDefaultButton.classList.toggle('active', state.settings.viewerMode === 'default');
       viewerUserButton.classList.toggle('active', state.settings.viewerMode === 'user');
-      if (githubTokenInput) githubTokenInput.value = state.settings.githubToken || '';
       configModal.classList.add('open');
       configModal.setAttribute('aria-hidden', 'false');
     }
@@ -1944,7 +2043,6 @@
     saveConfigButton.addEventListener('click', () => {
       state.settings.viewerMode = viewerUserButton.classList.contains('active') ? 'user' : 'default';
       state.settings.viewerUrl = viewerUrlInput.value.trim() || DEFAULT_VIEWER_URL;
-      state.settings.githubToken = githubTokenInput ? githubTokenInput.value.trim() : '';
       saveSettings();
       closeConfigModal();
     });
@@ -1952,6 +2050,56 @@
       if (event.target === configModal) closeConfigModal();
     });
     document.addEventListener('fullscreenchange', syncFullscreenButton);
+
+    // Toolbar scroll: touch handled natively by touch-action:pan-x in CSS
+    // Mouse drag handled here
+    if (toolbarEl) {
+      let drag = { on: false, x: 0, sl: 0, moved: false };
+
+      toolbarEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        drag.on   = true;
+        drag.moved = false;
+        drag.x    = e.clientX;
+        drag.sl   = toolbarEl.scrollLeft;
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!drag.on) return;
+        const dx = e.clientX - drag.x;
+        if (!drag.moved && Math.abs(dx) > 4) {
+          drag.moved = true;
+          toolbarEl.classList.add('dragging');
+        }
+        if (drag.moved) toolbarEl.scrollLeft = drag.sl - dx;
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!drag.on) return;
+        drag.on = false;
+        toolbarEl.classList.remove('dragging');
+        updateToolbarFade();
+      });
+
+      // Suppress click that fires right after a drag release
+      toolbarEl.addEventListener('click', (e) => {
+        if (drag.moved) {
+          e.stopImmediatePropagation();
+          drag.moved = false;
+        }
+      }, true);
+
+      // Mouse-wheel horizontal scroll
+      toolbarEl.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+        e.preventDefault();
+        toolbarEl.scrollLeft += e.deltaY;
+        updateToolbarFade();
+      }, { passive: false });
+
+      toolbarEl.addEventListener('scroll', updateToolbarFade, { passive: true });
+    }
 
     contentScrollEl.addEventListener('scroll', () => {
       updateScrollOverlay();
@@ -1975,13 +2123,18 @@
     });
 
     applyTileWidth();
+    updateToolbarFade();
     setScrollMode('horizontal');
     initTree();
     collapseSidebar(true);
     window.addEventListener('resize', () => {
       updateScrollOverlay();
       flashScrollOverlay();
+      updateToolbarFade();
     });
+    if (toolbarEl) {
+      toolbarEl.addEventListener('scroll', updateToolbarFade, { passive: true });
+    }
 
     const _startUrlParam = new URLSearchParams(window.location.search).get('url');
     const _startTarget = _startUrlParam ? _startUrlParam : APP_ROOT_URL.href;
