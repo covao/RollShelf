@@ -4,7 +4,8 @@
 RollShelf is a single-file thumbnail file explorer that works with local web servers and public GitHub repositories.
 
 ## Quick Start
-https://covao.github.io/RollShelf/RollShelf.html
+
+https://covao.github.io/RollShelf/RollShelf.html?url=https%3A%2F%2Fgithub.com%2Fcovao%2FRollShelf%2Ftree%2Fmain
 
 Open with a local directory:
 ```
