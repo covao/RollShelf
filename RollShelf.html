@@ -1436,22 +1436,62 @@
       return wrapper;
     }
 
+    // Parse GitHub URL to extract path info for tree operations
+    function parseGitHubTreePath(urlHref) {
+      try {
+        const u = new URL(urlHref);
+        if (u.hostname !== 'github.com') return null;
+        const parts = u.pathname.replace(/^\//, '').split('/').filter(Boolean);
+        const [owner, repo] = parts;
+        if (!owner || !repo) return null;
+        let branch = '', path = '';
+        if (parts[2] === 'tree' || parts[2] === 'blob') {
+          branch = parts[3] || '';
+          path = parts.slice(4).join('/');
+        }
+        return { owner, repo, branch, path };
+      } catch { return null; }
+    }
+
     async function ensureTreeChildren(dirUrl) {
       if (state.treeLoaded.has(dirUrl.href)) return;
       const node = state.treeNodeMap.get(dirUrl.href);
       if (!node) return;
       node.children.replaceChildren(createElement('div', 'note', 'Loading...'));
+      
       try {
-        const items = await fetchDirectoryListing(dirUrl);
-        const dirs = items.filter(i => i.isDir);
+        let dirs;
+        if (state.mode === 'github' && state.github) {
+          // GitHub mode: parse URL and fetch via API
+          const gh = parseGitHubTreePath(dirUrl.href);
+          if (gh) {
+            gh.branch = gh.branch || state.github.branch;
+            const items = await fetchGitHubListing(gh);
+            dirs = items.filter(i => i.isDir);
+          } else {
+            dirs = [];
+          }
+        } else {
+          // Local mode
+          const items = await fetchDirectoryListing(dirUrl);
+          dirs = items.filter(i => i.isDir);
+        }
+        
         state.treeChildrenCache.set(dirUrl.href, dirs);
         node.children.replaceChildren();
         for (const dir of dirs) {
-          if (!state.treeNodeMap.has(dir.url.href)) node.children.append(createTreeNode(dir.name, dir.url));
-          else node.children.append(state.treeNodeMap.get(dir.url.href).wrapper);
+          if (!state.treeNodeMap.has(dir.url.href)) {
+            node.children.append(createTreeNode(dir.name, dir.url));
+          } else {
+            node.children.append(state.treeNodeMap.get(dir.url.href).wrapper);
+          }
         }
         node.toggle.textContent = dirs.length ? '▸' : '•';
-      } catch { node.children.replaceChildren(createElement('div', 'note', 'Failed to read folder tree.')); node.toggle.textContent = '•'; }
+      } catch (e) {
+        console.warn('Tree load failed:', e);
+        node.children.replaceChildren(createElement('div', 'note', 'Failed to read folder tree.'));
+        node.toggle.textContent = '•';
+      }
       state.treeLoaded.add(dirUrl.href);
     }
 
@@ -1467,41 +1507,72 @@
     }
 
     async function ensureTreePath(dirUrl) {
-      // Build path segments from root to target
-      const rootPath = decodeURIComponent(APP_ROOT_PATH);
-      const targetPath = decodeURIComponent(dirUrl.pathname);
-      const relative = targetPath.slice(rootPath.length).replace(/\/$/, '');
-      const segments = relative ? relative.split('/').filter(Boolean) : [];
-      
-      // Start from root
-      let currentUrl = new URL(APP_ROOT_URL.href);
-      
-      // Traverse each segment, loading and expanding each level
-      for (let i = 0; i < segments.length; i++) {
-        // Load children of current directory
-        await ensureTreeChildren(currentUrl);
-        // Expand this node
-        await toggleTreeNode(currentUrl.href, true);
+      if (state.mode === 'github' && state.github) {
+        // GitHub mode: parse path and expand each level
+        const gh = parseGitHubTreePath(dirUrl.href);
+        if (!gh) return;
         
-        // Find the matching child URL from cache
-        const cached = state.treeChildrenCache.get(currentUrl.href);
-        if (cached) {
-          const matchingDir = cached.find(d => d.name === segments[i]);
-          if (matchingDir) {
-            currentUrl = matchingDir.url;
+        const segments = gh.path ? gh.path.split('/').filter(Boolean) : [];
+        
+        // Start from repo root
+        const rootGh = { ...state.github, path: '' };
+        let currentUrl = new URL(buildGitHubHtmlUrl(rootGh, '', true));
+        
+        // Ensure root node exists
+        if (!state.treeNodeMap.has(currentUrl.href)) {
+          DOM.treeRoot.replaceChildren(createTreeNode(state.github.repo, currentUrl));
+        }
+        
+        // Traverse each segment
+        for (let i = 0; i < segments.length; i++) {
+          await ensureTreeChildren(currentUrl);
+          await toggleTreeNode(currentUrl.href, true);
+          
+          const cached = state.treeChildrenCache.get(currentUrl.href);
+          if (cached) {
+            const matchingDir = cached.find(d => d.name === segments[i]);
+            if (matchingDir) {
+              currentUrl = matchingDir.url;
+            } else {
+              break;
+            }
           } else {
-            // Fallback: construct URL manually
+            break;
+          }
+        }
+        
+        // Load and expand current directory
+        await ensureTreeChildren(dirUrl);
+        await toggleTreeNode(dirUrl.href, true);
+      } else {
+        // Local mode
+        const rootPath = decodeURIComponent(APP_ROOT_PATH);
+        const targetPath = decodeURIComponent(dirUrl.pathname);
+        const relative = targetPath.slice(rootPath.length).replace(/\/$/, '');
+        const segments = relative ? relative.split('/').filter(Boolean) : [];
+        
+        let currentUrl = new URL(APP_ROOT_URL.href);
+        
+        for (let i = 0; i < segments.length; i++) {
+          await ensureTreeChildren(currentUrl);
+          await toggleTreeNode(currentUrl.href, true);
+          
+          const cached = state.treeChildrenCache.get(currentUrl.href);
+          if (cached) {
+            const matchingDir = cached.find(d => d.name === segments[i]);
+            if (matchingDir) {
+              currentUrl = matchingDir.url;
+            } else {
+              currentUrl = new URL(encodeURIComponent(segments[i]) + '/', currentUrl);
+            }
+          } else {
             currentUrl = new URL(encodeURIComponent(segments[i]) + '/', currentUrl);
           }
-        } else {
-          // Fallback: construct URL manually
-          currentUrl = new URL(encodeURIComponent(segments[i]) + '/', currentUrl);
         }
+        
+        await ensureTreeChildren(dirUrl);
+        await toggleTreeNode(dirUrl.href, true);
       }
-      
-      // Finally, load and expand the target directory itself
-      await ensureTreeChildren(dirUrl);
-      await toggleTreeNode(dirUrl.href, true);
     }
     
     // Recursively load and expand all subfolders in the tree
@@ -1530,6 +1601,19 @@
       state.treeExpanded.clear();
       state.treeLoaded.clear();
       DOM.treeRoot.append(createTreeNode(ROOT_LABEL, APP_ROOT_URL));
+      renderTreeHighlight();
+    }
+    
+    function initGitHubTree(gh) {
+      DOM.treeRoot.replaceChildren();
+      state.treeNodeMap.clear();
+      state.treeChildrenCache.clear();
+      state.treeExpanded.clear();
+      state.treeLoaded.clear();
+      
+      const rootUrl = new URL(buildGitHubHtmlUrl(gh, '', true));
+      const rootLabel = `${gh.owner}/${gh.repo}`;
+      DOM.treeRoot.append(createTreeNode(rootLabel, rootUrl));
       renderTreeHighlight();
     }
 
@@ -1625,6 +1709,14 @@
         let items;
         try { items = await fetchGitHubListing(gh); }
         catch (e) { DOM.grid.replaceChildren(createElement('div', 'empty', e.message)); return; }
+        
+        // Check if we're switching to GitHub mode or it's a new repo
+        const needsTreeInit = state.mode !== 'github' || 
+          !state.github || 
+          state.github.owner !== gh.owner || 
+          state.github.repo !== gh.repo ||
+          state.github.branch !== gh.branch;
+        
         state.mode = 'github';
         state.github = gh;
         state.currentDirUrl = new URL(buildGitHubHtmlUrl(gh, gh.path, true));
@@ -1633,10 +1725,24 @@
         updateSourceBadge();
         renderGrid(items);
         updateUpButton();
-        collapseSidebar(true);
+        
+        // Initialize or update tree for GitHub mode
+        if (needsTreeInit) {
+          initGitHubTree(gh);
+        }
+        if (options.updateTree !== false) {
+          await ensureTreePath(state.currentDirUrl);
+          renderTreeHighlight();
+        }
       } else {
         const dirUrl = normalizeDirUrl(targetUrl);
         const items = await fetchDirectoryListing(dirUrl);
+        
+        // Check if switching from GitHub mode
+        if (state.mode === 'github') {
+          initTree(); // Reset to local tree
+        }
+        
         state.mode = 'local';
         state.github = null;
         state.currentDirUrl = dirUrl;
